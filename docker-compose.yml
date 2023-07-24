@@ -1,0 +1,24 @@
+services:
+  web:
+    build: .
+    restart: "no"
+    depends_on:
+      - redis
+      - postgres
+    links:
+      - redis
+      - postgres
+    ports:
+      - "8000:8000"
+  redis:
+    image: redis
+    restart: "no"
+    expose:
+      - 6379
+  postgres:
+    image: postgres
+    environment:
+      POSTGRES_PASSWORD: postgres
+    restart: "no"
+    expose:
+      - 5432
