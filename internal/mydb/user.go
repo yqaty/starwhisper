@@ -3,23 +3,18 @@ package mydb
 import (
 	//"cmd/internal/mydb/tools"
 	"errors"
-	"fmt"
 	"log"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 )
 
 type User struct {
-	gorm.Model
-	UserName string `json:"user_name"`
-	Email    string `json:"email"`
-	Gender   string `json:"gender"`
-	Password string `json:"password"`
-}
-
-func (usr *User) String() string {
-	return fmt.Sprintf("ID:%d,UserName:%s,Email:%s,Gender:%s,Password:%s\n", usr.ID, usr.UserName, usr.Email, usr.Gender, usr.Password)
+	ID        uint      `json:"id" gorm:"primaryKey"`
+	CreatedAt time.Time `json:"created_at"`
+	UserName  string    `json:"username"`
+	Email     string    `json:"email" gorm:"index"`
+	Password  string    `json:"password,omitempty"`
 }
 
 func GetUsers(fr int, to int) ([]User, error) {
@@ -42,10 +37,19 @@ func EmailIsExist(email string) bool {
 	return result.RowsAffected > 0
 }
 
+func UserNameIsExist(user_name string) bool {
+	db := GetDB()
+	result := db.Where("user_name = ?", user_name).First(&User{})
+	return result.RowsAffected > 0
+}
+
 func AddUser(newusr *User) error {
 	log.Println("AddUser")
 	if EmailIsExist(newusr.Email) {
 		return errors.New("the email has been registered")
+	}
+	if UserNameIsExist(newusr.UserName) {
+		return errors.New("the username has been registered")
 	}
 	db := GetDB()
 	psd, err := bcrypt.GenerateFromPassword([]byte(newusr.Password), bcrypt.DefaultCost)
@@ -63,11 +67,18 @@ func CheckPassword(usr *User) (bool, error) {
 	log.Println("CheckPassword")
 	db := GetDB()
 	var dbusr User
-	if result := db.Where("email = ?", usr.Email).First(&dbusr); result.Error != nil {
+	result := db.Where("email = ?", usr.Email).First(&dbusr)
+	if result.RowsAffected == 0 {
+		return false, errors.New("the email is not exist")
+	}
+	if result.Error != nil {
 		return false, result.Error
 	}
 	err := bcrypt.CompareHashAndPassword([]byte(dbusr.Password), []byte(usr.Password))
 	*usr = dbusr
+	if err != nil {
+		return false, errors.New("the password is wrong")
+	}
 	return err == nil, err
 }
 
@@ -90,6 +101,7 @@ func UpdatePassword(usr *User) error {
 }
 
 func GetUserID(id uint) (User, error) {
+	log.Println("GetUserID")
 	db := GetDB()
 	var usr User
 	result := db.First(&usr, id)

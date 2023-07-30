@@ -16,10 +16,9 @@ func main() {
 		panic(fmt.Errorf("%w", err))
 	}
 	router := gin.Default()
-	myweb.InitApiRouter(router)
+	router.Use(myweb.CorsMiddleware())
 	myweb.InitUserRouter(router)
 	myweb.InitPostRouter(router)
 	myweb.InitCommentRouter(router)
-	myweb.InitReportRouter(router)
 	router.Run(":" + fmt.Sprintf(viper.GetString("port")))
 }

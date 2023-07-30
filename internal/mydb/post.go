@@ -5,70 +5,63 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strconv"
+	"math/rand"
 	"time"
 
 	"github.com/spf13/viper"
-	"gorm.io/gorm"
 )
 
 type Post struct {
-	gorm.Model
-	UserID        uint   `json:"-"`
-	UserName      string `json:"user_name"`
-	CommentNumber uint   `json:"comment_number"`
-	Title         string `json:"title"`
-	Context       string `json:"context"`
-	Link          string `json:"link"`
+	ID        uint      `json:"id" gorm:"primaryKey"`
+	CreatedAt time.Time `json:"created_at"`
+	UserID    uint      `json:"user_id" gorm:"index"`
+	Username  string    `json:"username"`
+	Title     string    `json:"title"`
+	Content   string    `json:"content"`
 }
 
-var _domain string
+type PostWithTags struct {
+	Post
+	Tags []string `json:"tags"`
+}
 
 func AddPost(pt *Post) error {
 	log.Println("AddPost")
 	db := GetDB()
 	result := db.Create(&pt)
-	if result.Error != nil {
-		return result.Error
-	}
-	var err error
-	pt.UserName, err = GetAnonymity(pt.UserID, pt.ID)
-	if err != nil {
-		return err
-	}
-	pt.Link = _domain + "/article/" + strconv.Itoa(int(pt.ID))
-	result = db.Save(&pt)
 	return result.Error
 }
 
-func UpdatePost(pt *Post) error {
-	log.Println("UpdatePost")
-	var dbpt Post
-	db := GetDB()
-	result := db.First(&dbpt, pt.ID)
-	if result.Error != nil {
-		return result.Error
-	}
-	if dbpt.UserID != pt.UserID {
-		return errors.New("permission denied")
-	}
-	dbpt.Title = pt.Title
-	dbpt.Context = pt.Context
-	result = db.Save(&dbpt)
-	*pt = dbpt
-	return result.Error
-}
-
-func GetPost(postid uint) (Post, error) {
-	log.Println("GetPost")
+func GetPostByID(post_id uint) (Post, error) {
+	log.Println("GetPostByID")
 	var ps Post
-	ps.ID = postid
+	ps.ID = post_id
 	db := GetDB()
 	result := db.First(&ps)
 	if result.RowsAffected == 0 {
 		return Post{}, errors.New("the post does not exist")
 	}
 	return ps, nil
+}
+
+func GetPostWithTagByID(post_id uint) (PostWithTags, error) {
+	log.Println("GetPostWithTagByID")
+	post, err := GetPostByID(post_id)
+	if err != nil {
+		return PostWithTags{}, err
+	}
+	tags, err := GetPostTags(post_id)
+	if err != nil {
+		return PostWithTags{}, err
+	}
+	return PostWithTags{post, tags}, nil
+}
+
+func GetUserPostNumber(user_id uint) (int64, error) {
+	db := GetDB()
+	var count int64
+	db.Model(&Post{}).Where("user_id = ?", user_id).Count(&count)
+	return count, nil
 }
 
 func SearchPosts(str string, fr time.Time, to time.Time, st int, ed int) ([]Post, error) {
@@ -83,8 +76,8 @@ func SearchPosts(str string, fr time.Time, to time.Time, st int, ed int) ([]Post
 	return ps, nil
 }
 
-//descending order
-func UserPosts(usrid uint, fr int, to int) ([]Post, error) {
+// descending order
+func GetUserPosts(usrid uint, fr int, to int) ([]Post, error) {
 	log.Println("UserPosts")
 	var pts []Post
 	db := GetDB()
@@ -111,6 +104,32 @@ func DelPost(pt *Post) error {
 	return result.Error
 }
 
+func GetRandPost() (Post, error) {
+	var post Post
+	var count int64
+	db := GetDB()
+	result := db.Model(&Post{}).Count(&count)
+	if result.Error != nil {
+		return Post{}, result.Error
+	}
+	rand.Seed(time.Now().Unix())
+	index := rand.Int63n(count)
+	result = db.Offset(int(index)).First(&post)
+	if result.Error != nil {
+		return Post{}, result.Error
+	}
+	return post, nil
+}
+
+func Posts2PostsWithTags(posts []Post) ([]PostWithTags, error) {
+	postswithtags := make([]PostWithTags, len(posts))
+	for i, post := range posts {
+		tags, _ := GetPostTags(post.ID)
+		postswithtags[i] = PostWithTags{post, tags}
+	}
+	return postswithtags, nil
+}
+
 func init() {
 	db := GetDB()
 	db.AutoMigrate(&Post{})
@@ -120,5 +139,4 @@ func init() {
 	if err != nil {
 		panic(fmt.Errorf("%w", err))
 	}
-	_domain = viper.GetString("domain") + ":" + viper.GetString("port")
 }
