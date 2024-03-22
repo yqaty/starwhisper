@@ -1,6 +1,6 @@
-# Tree Hole Api
+# starwhisper
 
-## 一个用 gin，gorm 框架编写的极简匿名论坛 api 部分
+## 一个用 gin，gorm 框架编写的漂流瓶网站
 
 ### 使用方法（谔谔）
 
